@@ -1,0 +1,372 @@
+# DEVOPS TOOLING WEBSITE SOLUTION
+
+We're going to open sign into AWS and create a new EC2 Instance. We are going to name it NFS Server.
+
+![AWS EC2 NFS Server](./NFS Server Instance.png)
+
+![Volume created in EC2 NFS Server](./NFSVolumeCreated.png)
+
+`lsblk`
+This command is used to inspect what block devices are attached to the server.
+
+ `df -h`
+ This command is used to see all mounts and free space on the server.
+
+![Volume configuration started](./DiskPartitioning.png)
+
+`sudo gdisk /dev/xvdf'
+This command is used to configure xvdf. We'll also use same command to configure xvdg and xvdh.
+
+`n`
+Command 'n' shows the partition number
+Press enter until you see the Hex code. Then type the command below;
+
+`8e00`
+
+`w`
+This command is use to Write.
+
+![First volume configured](./FirstVolumePartitioned.png)
+Other volume partitions will follow likewise.
+
+`lsblk`
+This command is used to show the configuration.
+
+![All disk volume are configured](./All3VolumesConfigured.png)
+
+Let us install lvm2 package using `sudo yum install lvm2`
+
+![LVM2 has been installed](./LVM2 Installed.png)
+
+Nw, let us use pvcreate utility to mark each of 3 disks as physical volumes (PVs) to be used by LVM. We'll create these phisical volumes with these 3 different commands:
+
+`sudo pvcreate /dev/xvdf1`
+`sudo pvcreate /dev/xvdg1`
+`sudo pvcreate /dev/xvdh1`
+
+![Physical volumes have been created](./PhysicalVolumesCreated.png)
+
+`sudo pvs`
+This command is used to verify the created volumes.
+
+![Volumes creation have been verified](./VerifiedVolumes.png)
+
+We will use vgcreate utility to add all 3 PVs to a volume group (VG). Name the VG webdata-vg. We will do this with the command below:
+`sudo vgcreate webdata-vg /dev/xvdh1 /dev/xvdg1 /dev/xvdf1`
+
+`sudo vgdisplay`
+Volume group was successfully created.
+
+![Creation of volume group](./VolumeGroup.png)
+
+Let us us lvcreate to create 3 logical volumes. We will use the command below to get it done:
+`sudo lvcreate -n apps-lv -L 5G webdata-vg`
+`sudo lvcreate -n logs-lv -L 5G webdata-vg`
+`sudo lvcreate -n opts-lv -L 5G webdata-vg`
+
+![LV verified](./LV created and verified.png)
+
+`sudo vgdisplay -v #view complete setup - VG, PV, and LV`
+This command is used to verify the entire setup.
+
+![Setup verified](./Entire setup verified.png)
+
+`sudo lsblk`
+Also use to verify setup.
+
+![Verification of setup](./Setup verified.png)
+
+`sudo mkdir /mnt/apps /mnt/logs /mnt/opts`
+This command is used to make directory where the volumes will be mounted.
+
+`sudo mkfs -t xfs /dev/webdata-vg/apps-lv`
+`sudo mkfs -t xfs /dev/webdata-vg/logs-lv`
+`sudo mkfs -t xfs /dev/webdata-vg/opts-lv`
+These commands were used to format all 3 created logical volumes.
+
+![Formatting of volumes](./Volumes formatted.png)
+
+`sudo mount /dev/webdata-vg/apps-lv /mnt/apps/`
+`sudo mount /dev/webdata-vg/logs-lv /mnt/logs/`
+`sudo mount /dev/webdata-vg/opts-lv /mnt/opts/`
+These commands were used to mount the logical volume.
+
+`sudo blkid /dev/webdata-vg/*`
+This command is used to run the block id.
+Copy the UUID because you are going to edit it in the fstab file.
+
+![Mounting and blkid of volumes](./Mount volumes and Blkid.png)
+
+Update /etc/fstab in this format using your own UUID. We will open the file to be update with this command:
+`sudo vi /etc/fstab`
+Paste and edit the UUID in this opened file.
+
+![Editing of fstab](./Fstab edited.png)
+
+![Successfully mounted volume](./Volume file successfully mounted.png)
+
+## Install NFS server, configure it to start on reboot and make sure it is u and running
+
+`sudo yum -y update`
+
+![Update carried out](./Sudo update.png)
+
+`sudo yum install nfs-utils -y`
+Command used to install nfs utilities.
+
+![Installing nfs utilities](./nfs utilities being installed.png)
+
+`sudo systemctl start nfs-server.service`
+`sudo systemctl enable nfs-server.service`
+`sudo systemctl status nfs-server.service`
+
+These commands will start and enable the nfs server, and will also check the status of the nfs server.
+
+![nfs server is active](./nfs server active.png)
+
+## Set up permission that will allow our Web servers to read, write and execute files on NFS
+
+The following commands will be used to set up these permissions to change ownership.
+
+`sudo chown -R nobody: /mnt/apps`
+`sudo chown -R nobody: /mnt/logs`
+`sudo chown -R nobody: /mnt/opts'
+
+`sudo chmod -R 777 /mnt/apps`
+`sudo chmod -R 777 /mnt/logs`
+`sudo chmod -R 777 /mnt/opts`
+
+## Restart the nfs server
+
+`sudo systemctl restart nfs-server.service`
+
+![nfs server restarted](./permissions and server restarted.png)
+
+## Configure access to NFS for clients within the same subnet
+
+`sudo vi /etc/exports`
+Use this command to open the file. Then paste the file below on the opened empty file.
+
+/mnt/apps <Subnet-CIDR>(rw,sync,no_all_squash,no_root_squash)
+/mnt/logs <Subnet-CIDR>(rw,sync,no_all_squash,no_root_squash)
+/mnt/opts <Subnet-CIDR>(rw,sync,no_all_squash,no_root_squash)
+
+Then proceed to your AWC EC2 console. Click on Networking. Ten click on Subnet ID to open a new tab.
+
+![Click networking](./AWS EC2 page.png)
+
+![Subnet ID opened](./Networking Subnet ID.png)
+
+Replace the Subnet CIDR in the file with the subnet address copied from the AWS EC2 Subnet ID CIDR.
+
+![CIDR edited on file](./CIDR Subnet ID pasted.png)
+Write, save and exit file.
+
+`sudo exportfs -arv`
+
+## Check which port is used by NFS and open it using Security Groups (add new Inbound Rule)
+
+`rpcinfo -p | grep nfs`
+This command is used to check the port being used by nfs
+
+![Security group port updated](./Nfs server port edited.png)
+
+## STEP 2 — CONFIGURE THE DATABASE SERVER
+
+Launch a Database server in AWS EC2. Name it DataSVR.
+
+Open a new terminal and type the command below:
+`cd downloads`
+
+Copy your SSH example from the AWS EC2 DataSVR and paste it on your new terminal.
+
+Update with this command:
+`sudo apt update`
+
+![Terminal update](./Ubuntu terminal update.png)
+
+`sudo apt upgrade`
+
+![Terminal upgrade](./Ubuntu terminal upgrade.png)
+
+Use this command to install mysql server.
+`sudo apt install mysql-server`
+
+![Installation of mysql server](./Mysql server installed.png)
+
+`sudo mysql`
+This command will take us to mysql console.
+
+![Mysql page](./Mysql console.png)
+
+`create dabase tooling`
+This command is used to create database. The database is named tooling.
+
+`create user 'webaccess'@'%' IDENTIFIED WITH mysql_native_password BY 'PassWord.1';`
+
+![Tooling and webaccess users created](./create tooling and webaccess.png)
+
+Grant permission to webaccess user on tooling database to do anything only from the webservers subnet cidr. Use the command below:
+`grant all privileges on tooling.* to 'webaccess'@'%';`
+
+`show databases`
+
+![permission has been granted and databases shown](./webaccess and show databases.png)
+
+`flush privileges;`
+
+`exit`
+This will exit mysql.
+
+Edit the bind-address on your file. Open the file with this command and change the bind-address to 0.0.0.0 so that it can allow access from all ports.
+`sudo vi /etc/mysql/mysql.conf.d/mysqld.cnf`
+
+![Mysql page](./Mysql console.png)
+
+`sudo systemctl restart mysql`
+
+## Step 3 — Prepare the Web Servers
+
+We'll be launching two webservers in AWS EC2. We will use RedHat. we will name them webserver1 and webserver2,
+
+Open two new terminals for these newly created webservers.
+Type `cd downloads` on each. Enter. Then paste the SSH examples from the webservers and press enter.
+
+Install NFS client on both newly created server.
+`sudo yum install nfs-utils nfs4-acl-tools -y`
+
+![nfs clients installed on both servers](./nfs client installed.png)
+
+### Mount /var/www/ and target the NFS server’s export for apps
+
+`sudo mkdir /var/www`
+Create directories on both servers.
+
+`sudo mount -t nfs -o rw,nosuid <NFS-Server-Private-IP-Address>:/mnt/apps /var/www`
+Copy the nfs private IP address and paste it on the IP address section on this command. Should be done on both servers.
+
+![command edited with nfs private IP address](./nfs private IP address pasted.png)
+
+`df -h`
+Use this command on both newly created servers. This will verify nfs mounting on both servers.
+
+![nfs mounted successfully on servers](./nfs verification on servers.png)
+
+`sudo vi /etc/fstab`
+This files needs to be edited.
+
+Paste "<NFS-Server-Private-IP-Address>:/mnt/apps /var/www nfs defaults 0 0" on the file and replace the IP address section with NFS private IP address.
+
+![nfs file edited in server](./nfs file edited in both servers.png)
+
+Install Remi’s repository, Apache and PHP
+
+`sudo yum install httpd -y`
+This command is used for the installation of apache and php.
+
+![Installing apache](./apache installation process.png)
+
+`sudo dnf install https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm`
+
+![Continuation of installation](./Apache php installation process continues.png)
+
+`sudo dnf install dnf-utils http://rpms.remirepo.net/enterprise/remi-release-8.rpm`
+
+![Installation process](./installation continues.png)
+
+`sudo dnf module reset php`
+
+`sudo dnf module enable php:remi-7.4`
+
+![Installion continues](./Installation continues1.png)
+
+`sudo dnf install php php-opcache php-gd php-curl php-mysqlnd`
+
+![Installation process continues](./Installation process.png)
+
+`sudo systemctl start php-fpm`
+
+`sudo systemctl enable php-fpm`
+
+`sudo setsebool -P httpd_execmem 1`
+
+Now, we'll launch tow other webserver. We will name them webserver3 and webserver4. We'll follow same procedure we use in webserver1 and webserver2 in installing Apache and php.
+
+Now let us move to the next step in webserver1 and webserver2
+
+`cd /var/www`
+
+Let us create a file call product.
+`touch product`
+
+![Creation of new file](./New file product created.png)
+
+Let us confirm the creation of the file in our other webserver that was created. We will use this command:
+`cd /var/www/html`
+Then we confirm with:
+`ls`
+
+![File creation confirmed on the other server](./file creation confirmed.png)
+
+## Fork the tooling source code from Darey.io Github Account to your Github account
+
+Let us install GIT with:
+`sudo yum install git`
+
+![installation of git on server](./git installed.png)
+
+`git clone https://github.com/darey-io/tooling.git`
+
+![forked file from Darey.io giyhub account](./forked tooling from Darey.io github account.png)
+
+Let us change directory to tooling file.
+`cd tooling`
+
+change directory to html
+`cd html`
+
+Move the tooling file to html
+`mv tooling /* .`
+
+![tooling moved](./tooling moved to html.png)
+
+`sudo rm -r tooling`
+Let us remove tooling with the command.
+
+`mv html/* .`
+This command is used to move all html files into the html directory.
+
+`sudo rm -r html`
+
+![moving and removing files](./files movement.png)
+
+Install mysql with this command
+`sudo yum install mysql`
+
+`sudo vi functions.php`
+Edit this file. You're going to change admin to webaccess. The other admin should be changed to your pass word. Also, copy and pase the database server private IP address.
+
+![edited file](./Edited file.png)
+
+`mysql -u webaccess -pPassWord.1 -h 172.31.88.191`
+This command will take you to mysql
+
+![Mysql console](./MySql.png)
+
+Update the website’s configuration to connect to the database (in /var/www/html/functions.php file). Apply tooling-db.sql script to your database using this command:
+
+`mysql -h <databse-private-ip> -u <db-username> -p <db-pasword> < tooling-db.sql`
+
+`mysql -u webaccess -pPassWord.1 -h 172.31.88.191`
+
+`show databases;`
+
+`select * from users;`
+
+![database for select users](./select users.png)
+
+`sudo systemctl restart httpd`
+
+Copy the public IP address of the webserver and paste it on your URL.
+
+![login page from the webserver public IP address](./login page)
