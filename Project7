@@ -147,9 +147,9 @@ The following commands will be used to set up these permissions to change owners
 `sudo vi /etc/exports`
 Use this command to open the file. Then paste the file below on the opened empty file.
 
-/mnt/apps <Subnet-CIDR>(rw,sync,no_all_squash,no_root_squash)
-/mnt/logs <Subnet-CIDR>(rw,sync,no_all_squash,no_root_squash)
-/mnt/opts <Subnet-CIDR>(rw,sync,no_all_squash,no_root_squash)
+/mnt/apps Subnet-CIDR(rw,sync,no_all_squash,no_root_squash)
+/mnt/logs Subnet-CIDR(rw,sync,no_all_squash,no_root_squash)
+/mnt/opts Subnet-CIDR(rw,sync,no_all_squash,no_root_squash)
 
 Then proceed to your AWC EC2 console. Click on Networking. Ten click on Subnet ID to open a new tab.
 
@@ -255,7 +255,7 @@ Use this command on both newly created servers. This will verify nfs mounting on
 `sudo vi /etc/fstab`
 This files needs to be edited.
 
-Paste "<NFS-Server-Private-IP-Address>:/mnt/apps /var/www nfs defaults 0 0" on the file and replace the IP address section with NFS private IP address.
+Paste <NFS-Server-Private-IP-Address:/mnt/apps /var/www nfs defaults 0 0" on the file and replace the IP address section with NFS private IP address.
 
 ![nfs file edited in server](./nfs file edited in both servers.png)
 
