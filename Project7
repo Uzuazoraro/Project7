@@ -151,7 +151,7 @@ Use this command to open the file. Then paste the file below on the opened empty
 /mnt/logs Subnet-CIDR(rw,sync,no_all_squash,no_root_squash)
 /mnt/opts Subnet-CIDR(rw,sync,no_all_squash,no_root_squash)
 
-Then proceed to your AWC EC2 console. Click on Networking. Ten click on Subnet ID to open a new tab.
+Then proceed to your AWC EC2 console. Click on Networking. Then click on Subnet ID to open a new tab.
 
 ![Click networking](./AWS EC2 page.png)
 
